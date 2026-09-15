@@ -1,4 +1,4 @@
-import type { File } from "@context/application"
+import type { File } from "@lib/git"
 
 export type TreeNodeType = "directory" | "file"
 

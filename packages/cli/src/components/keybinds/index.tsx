@@ -1,17 +1,16 @@
 import { For } from "solid-js"
 import { KeybindsConfig } from "@util/config"
-import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@context/keybind"
-import { Git } from "@lib/git"
+import { useKeybindRoute } from "@ui/route"
 import { useDialog } from "@ui/dialog"
 import CommitDialog from "@components/dialogs/commit"
 import KeybindHelper from "@components/keybind-helper"
-import { useApplication } from "@context/application"
+import { useWorkspace } from "@context/workspace"
 
 export default function Keybinds() {
   const dialog = useDialog()
   const keybind = useKeybind()
-  const app = useApplication()
+  const workspace = useWorkspace()
 
   const keybinds: Array<{ label: string; key: keyof KeybindsConfig }> = [
     { label: "trigger sidebar", key: "trigger_sidebar" },
@@ -23,26 +22,24 @@ export default function Keybinds() {
     { label: "discard all", key: "discard_all_files" },
   ]
 
-  useKeyboard(async (event) => {
-    if (dialog.stack.length > 0) return
-
+  useKeybindRoute(async (event) => {
     if (keybind.match("stage_all_files", event)) {
-      await Git.stageAllFiles()
-      await app.refreshFiles()
+      await workspace.stageAll()
       return
     }
 
     if (keybind.match("unstage_all_files", event)) {
-      await Git.unstageAllFiles()
-      await app.refreshFiles()
+      await workspace.unstageAll()
       return
     }
 
     if (keybind.match("commit", event)) {
+      event.preventDefault()
+      event.stopPropagation()
       dialog.replace(() => (
         <CommitDialog
           onConfirm={async () => {
-            await app.refreshFiles()
+            await workspace.refreshFiles()
             dialog.clear()
           }}
         />

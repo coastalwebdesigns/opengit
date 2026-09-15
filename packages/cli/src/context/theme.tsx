@@ -1,7 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
-import { useApplication } from "@context/application"
+import { createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
@@ -37,6 +36,7 @@ import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
 import vercel from "./theme/vercel.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
+import { useToast } from "@context/toast"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@global"
@@ -97,9 +97,33 @@ type ThemeColors = {
   syntaxPunctuation: RGBA
 }
 
-type Theme = ThemeColors & {
+export type Theme = ThemeColors & {
   _hasSelectedListItemText: boolean
   thinkingOpacity: number
+}
+
+export function getNameStatusColor(theme: Theme, v: string | undefined) {
+  switch (v) {
+    case "??":
+      return theme.info
+    case " M":
+      return theme.accent
+    case "A ":
+    case "R ":
+    case "M ":
+    case "D ":
+      return theme.success
+    case " D":
+    case "AM":
+    case "MM":
+      return theme.error
+    case "UA":
+    case "UU":
+    case "DU":
+      return theme.warning
+    default:
+      return theme.textMuted
+  }
 }
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
@@ -279,19 +303,26 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const app = useApplication()
     const kv = useKV()
-    const [store, setStore] = createStore({
+    const toast = useToast()
+    const [store, setStore] = createStore<{
+      themes: Record<string, ThemeJson>
+      mode: "dark" | "light"
+      active: string
+      ready: boolean
+    }>({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: app.config.theme,
+      active: kv.get("theme", "opencode"),
       ready: false,
     })
 
-    createEffect(() => {
-      const theme = app.config.theme
-      if (theme) setStore("active", theme)
-    })
+    function save(promise: Promise<unknown>, message: string) {
+      return promise.catch((error) => {
+        toast.show({ message, variant: "error" })
+        console.error(message, error)
+      })
+    }
 
     function init() {
       resolveSystemTheme()
@@ -376,11 +407,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       },
       setMode(mode: "dark" | "light") {
         setStore("mode", mode)
-        return kv.set("theme_mode", mode)
+        return save(kv.set("theme_mode", mode), "Failed to save appearance mode")
       },
       async set(theme: string) {
         setStore("active", theme)
-        await kv.set("theme", theme)
+        await save(kv.set("theme", theme), "Failed to save theme")
       },
       get ready() {
         return store.ready

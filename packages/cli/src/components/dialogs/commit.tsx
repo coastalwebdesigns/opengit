@@ -1,15 +1,16 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "@context/theme"
-import { Git } from "@lib/git"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@context/keybind"
 import { Spinner } from "@components/spinner"
 import { useApplication } from "@context/application"
+import { useWorkspace } from "@context/workspace"
 import { Opencode } from "@lib/opencode"
+import { Git } from "@lib/git"
 import { useToast } from "@context/toast"
 
-interface DiscardDialogProps {
+interface CommitDialogProps {
   onConfirm: () => void
 }
 
@@ -22,8 +23,9 @@ Generate a conventional commit message for the staged changes.
 - Return only the message, nothing else
 `
 
-export default function CommitDialog({ onConfirm }: DiscardDialogProps) {
+export default function CommitDialog({ onConfirm }: CommitDialogProps) {
   const app = useApplication()
+  const workspace = useWorkspace()
   const theme = useTheme().theme
   const keybind = useKeybind()
   const toast = useToast()
@@ -31,15 +33,10 @@ export default function CommitDialog({ onConfirm }: DiscardDialogProps) {
   let input: TextareaRenderable
   let disposed = false
 
-  const [files, setFiles] = createSignal<Array<string>>([])
+  const files = createMemo(() => workspace.files.filter((file) => Git.isFileStaged(file.status)))
   const [commitMessage, setCommitMessage] = createSignal<string>("")
   const [generatingMessage, setGeneratingMessage] = createSignal(false)
   const [loading, setLoading] = createSignal(false)
-
-  async function setup() {
-    const stagedFiles = await Git.getStagedFiles()
-    setFiles(stagedFiles)
-  }
 
   async function submit() {
     if (loading() || generatingMessage()) return
@@ -47,14 +44,9 @@ export default function CommitDialog({ onConfirm }: DiscardDialogProps) {
     if (commitMessage().trim() === "") return
 
     setLoading(true)
-    const res = await Git.commit(commitMessage())
+    const ok = await workspace.commit(commitMessage())
     setLoading(false)
-
-    if (res.error) {
-      toast.show({ message: "Failed to commit", variant: "error" })
-      console.error(res.error)
-      return
-    }
+    if (!ok) return
 
     onConfirm()
   }
@@ -69,35 +61,34 @@ export default function CommitDialog({ onConfirm }: DiscardDialogProps) {
       input.blur()
     }
 
-    const diff = await Git.getDiffStaged()
-    if (disposed) return
+    try {
+      const diff = await Git.getDiffStaged()
+      if (disposed) return
 
-    const p = PROMPT.concat("\n\n").concat(diff.join(""))
+      const res = await Opencode.prompt(PROMPT.concat("\n\n").concat(diff), app.config.aiModel)
+      if (disposed) return
 
-    const res = await Opencode.prompt(p, app.config.aiModel).then((v) => v?.trim().split("\n")[0])
-    if (disposed) return
-
-    setGeneratingMessage(false)
-
-    if (res && input && !input.isDestroyed) {
-      input.setText(res)
-      input.cursorOffset = res.length
-      setCommitMessage(res)
+      const message = res.trim().split("\n")[0]
+      if (message && input && !input.isDestroyed) {
+        input.setText(message)
+        input.cursorOffset = message.length
+        setCommitMessage(message)
+      }
+    } catch (error) {
+      toast.show({ message: "Failed to generate message with ai", variant: "error" })
+      console.error("Failed to generate message with ai", error)
+    } finally {
+      setGeneratingMessage(false)
+      setTimeout(() => {
+        if (!input || input.isDestroyed) return
+        input.focusable = true
+        input.focus()
+      }, 0)
     }
-
-    setTimeout(() => {
-      if (!input || input.isDestroyed) return
-      input.focusable = true
-      input.focus()
-    }, 0)
   }
 
   onCleanup(() => {
     disposed = true
-  })
-
-  createEffect(() => {
-    setup()
   })
 
   useKeyboard((key) => {

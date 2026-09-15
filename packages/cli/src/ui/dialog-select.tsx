@@ -20,9 +20,8 @@ export interface DialogSelectProps<T> {
   placeholder?: string
   options: DialogSelectOption<T>[]
   flat?: boolean
-  ref?: (ref: DialogSelectRef<T>) => void
   onMove?: (option: DialogSelectOption<T>) => void
-  onFilter?: (query: string) => void
+  onFilter?: (query: string, filtered: DialogSelectOption<T>[]) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
   keybind?: {
@@ -47,11 +46,6 @@ export interface DialogSelectOption<T = any> {
   gutter?: JSX.Element
   margin?: JSX.Element
   onSelect?: (ctx: DialogContext) => void
-}
-
-export type DialogSelectRef<T> = {
-  filter: string
-  filtered: DialogSelectOption<T>[]
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -219,15 +213,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   let scroll: ScrollBoxRenderable | undefined
-  const ref: DialogSelectRef<T> = {
-    get filter() {
-      return store.filter
-    },
-    get filtered() {
-      return filtered()
-    },
-  }
-  props.ref?.(ref)
 
   const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
   const left = createMemo(() => keybinds().filter((item) => item.side !== "right"))
@@ -249,7 +234,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             onInput={(e) => {
               batch(() => {
                 setStore("filter", e)
-                props.onFilter?.(e)
+                props.onFilter?.(e, filtered())
               })
             }}
             focusedBackgroundColor={theme.backgroundPanel}
@@ -368,12 +353,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             <For each={left()}>
               {(item) => (
                 <text>
-                  <span style={{ fg: theme.text }}>
-                    {Keybind.toString(item.keybind)}{" "}
-                  </span>
-                  <span style={{ fg: theme.textMuted }}>
-                    {item.title}
-                  </span>
+                  <span style={{ fg: theme.text }}>{Keybind.toString(item.keybind)} </span>
+                  <span style={{ fg: theme.textMuted }}>{item.title}</span>
                 </text>
               )}
             </For>
@@ -382,12 +363,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             <For each={right()}>
               {(item) => (
                 <text>
-                  <span style={{ fg: theme.text }}>
-                    {Keybind.toString(item.keybind)}{" "}
-                  </span>
-                  <span style={{ fg: theme.textMuted }}>
-                    {item.title}
-                  </span>
+                  <span style={{ fg: theme.text }}>{Keybind.toString(item.keybind)} </span>
+                  <span style={{ fg: theme.textMuted }}>{item.title}</span>
                 </text>
               )}
             </For>

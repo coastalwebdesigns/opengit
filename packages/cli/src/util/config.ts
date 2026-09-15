@@ -1,5 +1,14 @@
 import { z } from "zod"
 
+export const DiffView = z.enum(["split", "unified"])
+export type DiffView = z.infer<typeof DiffView>
+
+export const AIModel = z.object({
+  providerID: z.string(),
+  modelID: z.string(),
+})
+export type AIModel = z.infer<typeof AIModel>
+
 export const KeybindsConfig = z.object({
   leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
   app_exit: z.string().optional().default("ctrl+c,<leader>q,q").describe("Exit the application"),

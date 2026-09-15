@@ -1,59 +1,42 @@
 import { $ } from "bun"
-import { z } from "zod"
+import { NamedError } from "@util/error"
 
-const Commit = z.object({
-  hash: z.string(),
-  refs: z.string(),
-  author: z.string(),
-  email: z.string(),
-  relative: z.string(),
-  subject: z.string(),
-})
-export type Commit = z.infer<typeof Commit>
-
-const Branch = z.object({
-  name: z.string(),
-  current: z.boolean(),
-})
-export type Branch = z.infer<typeof Branch>
+export type File = {
+  status: string
+  path: string
+  previousPath?: string
+  added?: number
+  removed?: number
+}
 
 let cachedGitRoot: Promise<string> | undefined
+
+function expect(res: { exitCode: number; stdout: Buffer; stderr: Buffer }, fallback: string) {
+  if (res.exitCode === 0) return
+  const stderr = res.stderr.toString().trim()
+  const stdout = res.stdout.toString().trim()
+  const useful =
+    stderr.split("\n").find((line) => line.trim().length > 0) ||
+    stdout.split("\n").find((line) => line.trim().length > 0) ||
+    fallback
+  throw NamedError.create("git_error", { message: useful })
+}
 
 export namespace Git {
   export async function getGitRoot() {
     if (cachedGitRoot) return cachedGitRoot
-    cachedGitRoot = $`git rev-parse --show-toplevel`.quiet().nothrow().text().then((root) => root.trim())
+    cachedGitRoot = $`git rev-parse --show-toplevel`
+      .quiet()
+      .nothrow()
+      .text()
+      .then((root) => root.trim())
     return cachedGitRoot
-  }
-
-  export async function getRepoName() {
-    const root = await getGitRoot()
-    return root.split("/").pop()
   }
 
   export async function getCurrentBranch() {
     const root = await getGitRoot()
     const res = await $`git -C ${root} branch --show-current`.quiet().nothrow()
     return res.stdout.toString().trim()
-  }
-
-  export async function getBranches(): Promise<Array<Branch>> {
-    const root = await getGitRoot()
-    const res =
-      await $`git -C ${root} for-each-ref --sort=-committerdate --format="%(refname:short)%00%(HEAD)" refs/heads`
-        .quiet()
-        .nothrow()
-    return res
-      .text()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [name = "", head = ""] = line.split("\0")
-        return {
-          name,
-          current: head.trim() === "*",
-        }
-      })
   }
 
   export function isFileStaged(status: string) {
@@ -65,22 +48,6 @@ export namespace Git {
     return isFileStaged(status) && status[1] === " "
   }
 
-  export async function getDiffAll(path: string, status: string) {
-    if (status === "??") return getDiff(path, status)
-
-    const root = await getGitRoot()
-    return (
-      await Promise.all([
-        isFileStaged(status)
-          ? Bun.$`git -C ${root} diff -U0 --cached -- ${path}`.quiet().nothrow().text()
-          : "",
-        status[1] !== " "
-          ? Bun.$`git -C ${root} diff -U0 -- ${path}`.quiet().nothrow().text()
-          : "",
-      ])
-    ).join("\n")
-  }
-
   export async function getChangedFiles() {
     const root = await getGitRoot()
     const head = await Bun.$`git -C ${root} rev-parse --verify HEAD`.quiet().nothrow()
@@ -90,7 +57,11 @@ export namespace Git {
         ? Bun.$`git -C ${root} diff --no-ext-diff --no-renames --numstat -z HEAD -- .`.quiet().nothrow()
         : undefined,
     ])
-    if (status.exitCode !== 0) throw new Error(status.stderr.toString().trim() || "git status failed")
+    if (status.exitCode !== 0) {
+      throw NamedError.create("git_error", {
+        message: status.stderr.toString().trim() || "git status failed",
+      })
+    }
 
     const counts = new Map<string, { added: number; removed: number }>()
     for (const item of stats?.text().split("\0") ?? []) {
@@ -109,120 +80,71 @@ export namespace Git {
       })
     }
 
-    return Array.fromAsync(
-      status.text().split("\0").filter(Boolean),
-      async (item) => {
-        const code = item.slice(0, 2)
-        const path = item.slice(3)
-        const stat = counts.get(path)
-        if (stat || (code !== "??" && (!code.includes("A") || code.includes("D")))) {
-          return { status: code, path, added: stat?.added ?? 0, removed: stat?.removed ?? 0 }
-        }
+    return Array.fromAsync(status.text().split("\0").filter(Boolean), async (item) => {
+      const code = item.slice(0, 2)
+      const path = item.slice(3)
+      const stat = counts.get(path)
+      if (stat || (code !== "??" && (!code.includes("A") || code.includes("D")))) {
+        return { status: code, path, added: stat?.added ?? 0, removed: stat?.removed ?? 0 }
+      }
 
-        const result = await Bun.$`git -C ${root} diff --no-index --numstat -- /dev/null ${path}`.quiet().nothrow()
-        const parts = result.text().split("\t")
-        const added = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
-        const removed = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
-        return {
-          status: code,
-          path,
-          added: Number.isFinite(added) ? added : 0,
-          removed: Number.isFinite(removed) ? removed : 0,
-        }
-      },
-    )
+      const result = await Bun.$`git -C ${root} diff --no-index --numstat -- /dev/null ${path}`.quiet().nothrow()
+      const parts = result.text().split("\t")
+      const added = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
+      const removed = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
+      return {
+        status: code,
+        path,
+        added: Number.isFinite(added) ? added : 0,
+        removed: Number.isFinite(removed) ? removed : 0,
+      }
+    })
   }
 
   export async function stageFile(path: string) {
     const root = await getGitRoot()
-    return await $`git -C ${root} add ${path}`.quiet().nothrow()
+    expect(await $`git -C ${root} add ${path}`.quiet().nothrow(), "git add failed")
   }
 
   export async function unstageFile(path: string) {
     const root = await getGitRoot()
-    return await $`git -C ${root} restore --staged ${path}`.quiet().nothrow()
+    expect(await $`git -C ${root} restore --staged ${path}`.quiet().nothrow(), "git restore --staged failed")
   }
 
   export async function stageAllFiles() {
     const root = await getGitRoot()
-    return await $`git -C ${root} add .`.quiet().nothrow()
+    expect(await $`git -C ${root} add .`.quiet().nothrow(), "git add failed")
   }
 
-  export async function getDiffStaged(): Promise<Array<string>> {
+  export async function getDiffStaged() {
     const root = await getGitRoot()
     const res = await $`git -C ${root} diff --staged`.quiet().nothrow()
-    if (!res.stdout.toString()) return []
-    return res.stdout.toString().trim().split("\n")
-  }
-
-  export async function getStagedFiles(): Promise<Array<string>> {
-    const root = await getGitRoot()
-    const res = await $`git -C ${root} diff --staged --name-only`.quiet().nothrow()
-    if (!res.stdout.toString()) return []
-    return res.stdout.toString().trim().split("\n")
+    return res.stdout.toString().trim()
   }
 
   export async function unstageAllFiles() {
     const root = await getGitRoot()
-    return await $`git -C ${root} restore --staged .`.quiet().nothrow()
+    expect(await $`git -C ${root} restore --staged .`.quiet().nothrow(), "git restore --staged failed")
   }
 
   export async function commit(message: string) {
     const root = await getGitRoot()
-    const res = await $`git -C ${root} commit -m "${message}"`.quiet().nothrow()
-
-    if (res.exitCode === 0) {
-      return { success: "Success" }
-    }
-
-    const stderr = res.stderr.toString().trim()
-    const stdout = res.stdout.toString().trim()
-
-    const useful =
-      stderr.split("\n").find((line) => line.trim().length > 0) ||
-      stdout.split("\n").find((line) => line.trim().length > 0) ||
-      `git commit failed (exit ${res.exitCode})`
-
-    return { error: useful }
+    expect(await $`git -C ${root} commit -m "${message}"`.quiet().nothrow(), "git commit failed")
   }
 
   export async function discardFile(path: string, status?: string) {
     const root = await getGitRoot()
-
-    let res
     if (status === "??") {
-      res = await $`git -C ${root} clean -f -- ${path}`.quiet().nothrow()
-    } else {
-      res = await $`git -C ${root} restore ${path}`.quiet().nothrow()
+      expect(await $`git -C ${root} clean -f -- ${path}`.quiet().nothrow(), "git clean failed")
+      return
     }
-
-    if (res.exitCode === 0) {
-      return { success: "Success" }
-    }
-
-    const stderr = res.stderr.toString().trim()
-    const stdout = res.stdout.toString().trim()
-
-    const useful =
-      stderr.split("\n").find((line) => line.trim().length > 0) ||
-      stdout.split("\n").find((line) => line.trim().length > 0) ||
-      `git restore failed (exit ${res.exitCode})`
-
-    return { error: useful }
+    expect(await $`git -C ${root} restore ${path}`.quiet().nothrow(), "git restore failed")
   }
 
   export async function discardAllFiles() {
     const root = await getGitRoot()
-    const restore = await $`git -C ${root} restore .`.quiet().nothrow()
-
-    if (restore.exitCode !== 0) {
-      return { error: restore.stderr.toString().trim() || `git restore failed (exit ${restore.exitCode})` }
-    }
-
-    const clean = await $`git -C ${root} clean -fd`.quiet().nothrow()
-    if (clean.exitCode === 0) return { success: "Success" }
-
-    return { error: clean.stderr.toString().trim() || `git clean failed (exit ${clean.exitCode})` }
+    expect(await $`git -C ${root} restore .`.quiet().nothrow(), "git restore failed")
+    expect(await $`git -C ${root} clean -fd`.quiet().nothrow(), "git clean failed")
   }
 
   export function getLineCounts(diff: string): {

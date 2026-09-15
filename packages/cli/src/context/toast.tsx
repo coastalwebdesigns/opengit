@@ -1,4 +1,4 @@
-import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, useContext, type Accessor, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -15,7 +15,6 @@ const ToastOptions = z.object({
 
 export type ToastOptions = z.infer<typeof ToastOptions>
 
-
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
@@ -23,7 +22,7 @@ export function Toast() {
 
   return (
     <Show when={toast.currentToast}>
-      {(current) => (
+      {(current: Accessor<ToastOptions>) => (
         <box
           position="absolute"
           justifyContent="center"
@@ -71,7 +70,7 @@ function init() {
         setStore("currentToast", null)
       }, duration).unref()
     },
-    error: (err: any) => {
+    error: (err: unknown) => {
       if (err instanceof Error)
         return toast.show({
           variant: "error",

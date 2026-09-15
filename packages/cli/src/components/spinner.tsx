@@ -1,5 +1,5 @@
 import { Show } from "solid-js"
-import { useTheme } from "../context/theme"
+import { useTheme } from "@context/theme"
 import type { JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import "opentui-spinner/solid"

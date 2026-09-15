@@ -1,9 +1,8 @@
 import { useTheme } from "@context/theme"
-import { useToast } from "@context/toast"
 import { TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import { Git } from "@lib/git"
-import { type File } from "@context/application"
+import { useWorkspace } from "@context/workspace"
+import { type File } from "@lib/git"
 
 interface DiscardDialogProps {
   file?: File
@@ -12,38 +11,25 @@ interface DiscardDialogProps {
   onCancel: () => void
 }
 
-export default function DiscardDialog({
-  file,
-  all,
-  onConfirm,
-}: DiscardDialogProps) {
+export default function DiscardDialog({ file, all, onConfirm }: DiscardDialogProps) {
   const theme = useTheme().theme
-  const toast = useToast()
+  const workspace = useWorkspace()
 
-  useKeyboard(key => {
+  useKeyboard((key) => {
     if (key.name === "return") {
       submit()
     }
   })
 
   async function submit() {
-    const res = all
-      ? await Git.discardAllFiles()
-      : await Git.discardFile(file!.path, file!.status)
-    
-    if (res.error) {
-      toast.error(`Failed to discard: ${res.error}`)
-      console.error("Failed to discard", res.error)
-    }
+    if (all) await workspace.discardAll()
+    else await workspace.discard(file!)
 
     onConfirm()
   }
 
   return (
-    <box
-      paddingBottom={1}
-      gap={1}
-    >
+    <box paddingBottom={1} gap={1}>
       <box
         flexDirection="row"
         alignItems="center"
@@ -53,16 +39,12 @@ export default function DiscardDialog({
         paddingRight={4}
         marginBottom={1}
       >
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>Discard {all ? "all changes" : "changes"}?</text>
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          Discard {all ? "all changes" : "changes"}?
+        </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <box
-        paddingLeft={4}
-        paddingRight={4}
-        marginBottom={1}
-        flexDirection="column"
-        gap={1}
-      >
+      <box paddingLeft={4} paddingRight={4} marginBottom={1} flexDirection="column" gap={1}>
         <text fg={theme.textMuted}>
           {all ? "Discard all unstaged changes and untracked files?" : "Are you sure you want to discard changes to:"}
         </text>

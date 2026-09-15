@@ -1,26 +1,14 @@
 import { z } from "zod"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { KeybindsConfig } from "@/util/config"
+import { AIModel, DiffView, KeybindsConfig } from "@/util/config"
 import { useKV } from "./kv"
-import { onCleanup, onMount } from "solid-js"
-import { Git } from "@lib/git"
 import { Opencode } from "@lib/opencode"
-
-type Panes = "files"
-type View = "diff" | "code"
-const DiffView = z.enum(["split", "unified"])
-export type DiffView = z.infer<typeof DiffView>
-const AIModel = z.object({
-  providerID: z.string(),
-  modelID: z.string(),
-})
-export type AIModel = z.infer<typeof AIModel>
+import { useToast } from "@context/toast"
 
 type Config = {
-  theme?: string
-  activePane: Panes
-  mainView: View
+  activePane: "files"
+  mainView: "diff" | "code"
   diffView: DiffView
   diffWrap: boolean
   diffDimStaged: boolean
@@ -29,35 +17,12 @@ type Config = {
   aiModel: AIModel
 }
 
-const File = z.object({
-  status: z.string(),
-  path: z.string(),
-  previousPath: z.string().optional(),
-  added: z.number().optional(),
-  removed: z.number().optional(),
-})
-export type File = z.infer<typeof File>
-
 export const { use: useApplication, provider: ApplicationProvider } = createSimpleContext({
   name: "Application",
   init: () => {
     const kv = useKV()
-    const [store, setStore] = createStore<{
-      file: File
-      files: File[]
-      filesLoaded: boolean
-      filesError: boolean
-      branch: string
-      config: Config
-    }>({
-      file: {
-        status: "",
-        path: "",
-      },
-      files: [],
-      filesLoaded: false,
-      filesError: false,
-      branch: "",
+    const toast = useToast()
+    const [store, setStore] = createStore<{ config: Config }>({
       config: {
         activePane: "files",
         mainView: "diff",
@@ -65,91 +30,42 @@ export const { use: useApplication, provider: ApplicationProvider } = createSimp
         diffWrap: z.boolean().catch(true).parse(kv.get("diff_wrap")),
         diffDimStaged: z.boolean().catch(true).parse(kv.get("diff_dim_staged")),
         keybinds: KeybindsConfig.parse({}),
-        theme: kv.get("theme", "opencode"),
         aiEnabled: false,
         aiModel: AIModel.catch(Opencode.defaultModel).parse(kv.get("ai_model")),
       },
     })
 
-    let pending: Promise<void> | undefined
-
-    function loadFiles() {
-      pending = (async () => {
-        setStore(
-          "files",
-          (await Git.getChangedFiles()).sort((a, b) => a.path.localeCompare(b.path)),
-        )
-        setStore("filesLoaded", true)
-        setStore("filesError", false)
-      })()
-        .catch(() => {
-          setStore("filesLoaded", true)
-          setStore("filesError", true)
-        })
-        .finally(() => {
-          pending = undefined
-        })
-      return pending
+    function save(promise: Promise<unknown>, message: string) {
+      return promise.catch((error) => {
+        toast.show({ message, variant: "error" })
+        console.error(message, error)
+      })
     }
-
-    function refreshFiles() {
-      const current = pending
-      if (!current) return loadFiles()
-      return current.then(() => pending ?? loadFiles())
-    }
-
-    onMount(() => {
-      loadFiles()
-      const interval = setInterval(() => {
-        if (!pending) loadFiles()
-      }, 1000)
-      onCleanup(() => clearInterval(interval))
-    })
 
     return {
-      get file() {
-        return store.file
-      },
-      get branch() {
-        return store.branch
-      },
-      get files() {
-        return store.files
-      },
-      get filesLoaded() {
-        return store.filesLoaded
-      },
-      get filesError() {
-        return store.filesError
-      },
       get config() {
         return store.config
       },
 
-      setFile(v: File) {
-        setStore("file", v)
-      },
-      setBranch(v: string) {
-        setStore("branch", v)
+      setConfig(patch: Partial<Config>) {
+        setStore("config", { ...store.config, ...patch })
       },
       setDiffView(v: DiffView) {
         setStore("config", "diffView", v)
-        return kv.set("diff_view", v)
+        return save(kv.set("diff_view", v), "Failed to save diff view")
       },
       setDiffWrap(v: boolean) {
         setStore("config", "diffWrap", v)
-        return kv.set("diff_wrap", v)
+        return save(kv.set("diff_wrap", v), "Failed to save word wrapping")
       },
       setDiffDimStaged(v: boolean) {
         setStore("config", "diffDimStaged", v)
-        return kv.set("diff_dim_staged", v)
+        return save(kv.set("diff_dim_staged", v), "Failed to save staged file appearance")
       },
       setAiModel(v: AIModel) {
         setStore("config", "aiModel", v)
-        return kv.set("ai_model", v)
+        return save(kv.set("ai_model", v), "Failed to save AI model")
       },
-      refreshFiles,
-      setConfig: (v: Config) => setStore("config", v),
     }
   },
 })

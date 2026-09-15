@@ -1,16 +1,17 @@
 import { KVProvider } from "@context/kv"
 import { ApplicationProvider, useApplication } from "@context/application"
+import { WorkspaceProvider, useWorkspace } from "@context/workspace"
 import { ThemeProvider, useTheme } from "@context/theme"
 import { KeybindProvider, useKeybind } from "@context/keybind"
-import { Clipboard } from "@util/clipboard"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { Clipboard } from "@lib/clipboard"
+import { useRenderer } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useDialog, DialogProvider } from "@ui/dialog"
 import { Toast, ToastProvider, useToast } from "@context/toast"
+import { useKeybindRoute } from "@ui/route"
 import Keybinds from "@components/keybinds"
 import { createMemo, createSignal, Show, onMount } from "solid-js"
 import { Opencode } from "@lib/opencode"
-import { Git } from "@lib/git"
 import Sidebar from "@components/sidebar"
 import Main from "@components/main"
 import ThemesDialog from "@components/dialogs/themes"
@@ -26,13 +27,15 @@ export function tui() {
     <ToastProvider>
       <KVProvider>
         <ApplicationProvider>
-          <ThemeProvider mode="dark">
-            <KeybindProvider>
-              <DialogProvider>
-                <App />
-              </DialogProvider>
-            </KeybindProvider>
-          </ThemeProvider>
+          <WorkspaceProvider>
+            <ThemeProvider mode="dark">
+              <KeybindProvider>
+                <DialogProvider>
+                  <App />
+                </DialogProvider>
+              </KeybindProvider>
+            </ThemeProvider>
+          </WorkspaceProvider>
         </ApplicationProvider>
       </KVProvider>
     </ToastProvider>
@@ -45,11 +48,12 @@ function App() {
   const theme = useTheme()
   const dialog = useDialog()
   const app = useApplication()
+  const workspace = useWorkspace()
   const toast = useToast()
   const [sidebar, setSidebar] = createSignal(true)
-  const count = () => app.files.length
+  const count = () => workspace.files.length
   const changes = createMemo(() =>
-    app.files.reduce(
+    workspace.files.reduce(
       (total, file) => ({
         added: total.added + (file.added ?? 0),
         removed: total.removed + (file.removed ?? 0),
@@ -65,53 +69,50 @@ function App() {
     process.exit(0)
   }
 
-  async function setupAi() {
+  async function setup() {
     const available = await Opencode.providers()
     if (available.length > 0) {
-      app.setConfig({ ...app.config, aiEnabled: true })
+      app.setConfig({ aiEnabled: true })
     }
   }
 
-  async function setup() {
-    const branch = await Git.getCurrentBranch()
-    if (branch) app.setBranch(branch)
-    await setupAi()
-  }
+  useKeybindRoute(
+    (event) => {
+      if (keybind.match("theme_mode_toggle", event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        dialog.replace(() => <ThemesDialog />)
+        return
+      }
 
-  useKeyboard((event) => {
-    if (keybind.match("theme_mode_toggle", event)) {
-      dialog.replace(() => <ThemesDialog />)
-    }
+      if (keybind.match("debug_toggle", event)) {
+        renderer?.console.toggle()
+        renderer?.toggleDebugOverlay()
+      }
 
-    if (keybind.match("debug_toggle", event)) {
-      renderer?.console.toggle()
-      renderer?.toggleDebugOverlay()
-    }
+      if (keybind.match("settings_open", event)) {
+        event.preventDefault()
+        event.stopPropagation()
+        dialog.replace(() => <SettingsDialog />)
+        return
+      }
 
-    if (dialog.stack.length > 0) return
+      if (keybind.match("diff_view_toggle", event)) {
+        app.setDiffView(app.config.diffView === "split" ? "unified" : "split")
+        return
+      }
 
-    if (keybind.match("settings_open", event)) {
-      dialog.replace(() => <SettingsDialog />)
-      return
-    }
+      if (keybind.match("trigger_sidebar", event)) {
+        setSidebar(!sidebar())
+        return
+      }
 
-    if (keybind.match("diff_view_toggle", event)) {
-      app.setDiffView(app.config.diffView === "split" ? "unified" : "split").catch((error) => {
-        toast.show({ message: "Failed to save diff view", variant: "error" })
-        console.error("Failed to save diff view", error)
-      })
-      return
-    }
-
-    if (keybind.match("trigger_sidebar", event)) {
-      setSidebar(!sidebar())
-      return
-    }
-
-    if (keybind.match("app_exit", event)) {
-      exit()
-    }
-  })
+      if (keybind.match("app_exit", event)) {
+        exit()
+      }
+    },
+    ["theme_mode_toggle", "debug_toggle"],
+  )
 
   onMount(setup)
 
@@ -158,10 +159,10 @@ function App() {
             </text>
           </box>
           <Show
-            when={app.filesLoaded && !app.filesError}
+            when={workspace.filesLoaded && !workspace.filesError}
             fallback={
               <text fg={theme.theme.textMuted} wrapMode="none">
-                {app.filesError ? "Unavailable" : "Loading..."}
+                {workspace.filesError ? "Unavailable" : "Loading..."}
               </text>
             }
           >

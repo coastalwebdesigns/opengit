@@ -1,30 +1,32 @@
-import { createEffect, createMemo, createSignal, Show, on, onCleanup } from "solid-js"
-import { useApplication, type File } from "@context/application"
+import { createMemo, Show } from "solid-js"
+import { useApplication } from "@context/application"
+import { useWorkspace } from "@context/workspace"
 import { Pane } from "@ui/pane"
 import { useTheme } from "@context/theme"
 import { filetype } from "@util/code"
 import { Git } from "@lib/git"
-import { watchFile, unwatchFile } from "fs"
-import { join } from "path"
 import KeybindHelper from "@components/keybind-helper"
+import { useFileContent } from "@components/panes/content"
 
 export default function Diff() {
   const app = useApplication()
+  const workspace = useWorkspace()
   const { theme, syntax } = useTheme()
 
-  const [diff, setDiff] = createSignal("")
-  const [watchedPath, setWatchedPath] = createSignal<string | null>(null)
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  const diff = useFileContent(
+    () => workspace.file,
+    (_absolute, file) => Git.getDiff(file.path, file.status),
+  )
 
   const counts = createMemo(() => Git.getLineCounts(diff()))
-  const dimmed = createMemo(() => app.config.diffDimStaged && Git.isFileFullyStaged(app.file.status))
+  const dimmed = createMemo(() => app.config.diffDimStaged && Git.isFileFullyStaged(workspace.file.status))
   const rendered = createMemo(() => {
     const value = diff()
     if (!value) return
     return { value, dimmed: dimmed() }
   })
   const diffFiletype = createMemo(() => {
-    const type = filetype(app.file.path)
+    const type = filetype(workspace.file.path)
     if (type === "astro") return "html"
     return type
   })
@@ -42,74 +44,8 @@ export default function Diff() {
     )
   })
 
-  async function refreshDiff(file: File) {
-    const diff = await Git.getDiff(file.path, file.status)
-    setDiff(diff)
-  }
-
-  async function setup(file: File) {
-    const existing = watchedPath()
-    if (existing) {
-      unwatchFile(existing)
-    }
-
-    if (!file || !file.path) return
-
-    const root = await Git.getGitRoot()
-    const absolutePath = join(root, file.path)
-
-    watchFile(absolutePath, { interval: 200 }, (curr, prev) => {
-      if (curr.mtime !== prev.mtime) {
-        if (debounceTimer) clearTimeout(debounceTimer)
-
-        debounceTimer = setTimeout(() => {
-          refreshDiff(file)
-        }, 150)
-      }
-    })
-
-    setWatchedPath(absolutePath)
-  }
-
-  createEffect(
-    on(
-      () => [app.file.path, app.file.status],
-      () => {
-        const file = app.file
-        if (file.path) {
-          refreshDiff(file)
-          return
-        }
-        setDiff("")
-      },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => app.file.path,
-      () => {
-        const file = app.file
-        if (file.path) {
-          setup(file)
-          return
-        }
-        const existing = watchedPath()
-        if (!existing) return
-        unwatchFile(existing)
-        setWatchedPath(null)
-      },
-    ),
-  )
-
-  onCleanup(() => {
-    const existing = watchedPath()
-    if (existing) unwatchFile(existing)
-    if (debounceTimer) clearTimeout(debounceTimer)
-  })
-
   return (
-    <Pane title={app.file.path} subtitle={subtitle()} contentPadding={0}>
+    <Pane title={workspace.file.path} subtitle={subtitle()} contentPadding={0}>
       <box width="100%" height="100%" flexDirection="column" gap={1}>
         <Show when={!diff()} keyed>
           <box>
@@ -130,20 +66,14 @@ export default function Diff() {
                   showLineNumbers={true}
                   width="100%"
                   fg={dimmed() ? theme.textMuted : theme.text}
-                  // addedBg={theme.diffAddedBg}
                   addedBg={dimmed() ? theme.backgroundElement : "#1F3025"}
-                  // removedBg={theme.diffRemovedBg}
                   removedBg={dimmed() ? theme.backgroundElement : "#372526"}
                   contextBg={theme.background}
-                  // addedSignColor={theme.diffHighlightAdded}
                   addedSignColor={dimmed() ? theme.textMuted : "#88d39b"}
-                  // removedSignColor={theme.diffHighlightRemoved}
                   removedSignColor={dimmed() ? theme.textMuted : "#f0a0a0"}
                   lineNumberFg={theme.diffLineNumber}
                   lineNumberBg={theme.background}
-                  // addedLineNumberBg={theme.diffAddedLineNumberBg}
                   addedLineNumberBg={dimmed() ? theme.backgroundElement : "#1F3025"}
-                  // removedLineNumberBg={theme.diffRemovedLineNumberBg}
                   removedLineNumberBg={dimmed() ? theme.backgroundElement : "#372526"}
                 />
               </scrollbox>

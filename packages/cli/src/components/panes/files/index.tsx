@@ -1,11 +1,11 @@
 import { createEffect, createMemo, createSignal, For, Show, untrack } from "solid-js"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeybind } from "@context/keybind"
-import { tint, useTheme } from "@context/theme"
-import { useKeyboard } from "@opentui/solid"
-import { getNameStatusColor } from "@util/color"
+import { tint, useTheme, getNameStatusColor } from "@context/theme"
+import { useKeybindRoute } from "@ui/route"
 import { Pane } from "@ui/pane"
 import { useApplication } from "@context/application"
+import { useWorkspace } from "@context/workspace"
 import { Git } from "@lib/git"
 import { useDialog } from "@ui/dialog"
 import DiscardDialog from "@components/dialogs/discard"
@@ -21,12 +21,13 @@ import {
 
 export default function Files(props: { visible: boolean }) {
   const app = useApplication()
+  const workspace = useWorkspace()
   const dialog = useDialog()
   const theme = useTheme().theme
   const keybind = useKeybind()
   const active = () => app.config.activePane === "files"
   const faded = () => tint(theme.text, theme.background, 0.75)
-  const restorePath = app.file.path
+  const restorePath = workspace.file.path
 
   const [highlighted, setHighlighted] = createSignal(restorePath)
   const [collapsed, setCollapsed] = createSignal<ReadonlySet<string>>(new Set())
@@ -35,7 +36,7 @@ export default function Files(props: { visible: boolean }) {
   let fileListScrollbox: ScrollBoxRenderable | undefined
   let previous: string[] = []
 
-  const files = () => app.files
+  const files = () => workspace.files
   const tree = createMemo(() => buildFileTree(files()))
   const rows = createMemo(() => flattenTree(tree(), collapsed()))
   const allRows = createMemo(() => flattenTree(tree()))
@@ -53,8 +54,7 @@ export default function Files(props: { visible: boolean }) {
     setCollapsed(next)
   }
 
-  useKeyboard(async (event) => {
-    if (dialog.stack.length > 0) return
+  useKeybindRoute(async (event) => {
     if (!props.visible) return
     if (app.config.activePane !== "files") return
 
@@ -97,11 +97,13 @@ export default function Files(props: { visible: boolean }) {
     if (keybind.match("discard_file", event)) {
       const file = getFile(node)
       if (!file) return
+      event.preventDefault()
+      event.stopPropagation()
       dialog.replace(() => (
         <DiscardDialog
           file={file}
           onConfirm={async () => {
-            await app.refreshFiles()
+            await workspace.refreshFiles()
             dialog.clear()
           }}
           onCancel={() => {}}
@@ -112,11 +114,13 @@ export default function Files(props: { visible: boolean }) {
 
     if (keybind.match("discard_all_files", event)) {
       if (files().length === 0) return
+      event.preventDefault()
+      event.stopPropagation()
       dialog.replace(() => (
         <DiscardDialog
           all
           onConfirm={async () => {
-            await app.refreshFiles()
+            await workspace.refreshFiles()
             dialog.clear()
           }}
           onCancel={() => {}}
@@ -129,12 +133,10 @@ export default function Files(props: { visible: boolean }) {
       const file = getFile(node)
       if (!file) return
       if (Git.isFileStaged(file.status)) {
-        await Git.unstageFile(file.path)
+        await workspace.unstage(file)
       } else {
-        await Git.stageFile(file.path)
+        await workspace.stage(file)
       }
-
-      await app.refreshFiles()
       return
     }
   })
@@ -143,7 +145,7 @@ export default function Files(props: { visible: boolean }) {
     const next = rows()
     const all = allRows()
     const path = highlighted()
-    if (!app.filesLoaded) return
+    if (!workspace.filesLoaded) return
 
     const index = previous.indexOf(path)
     previous = next.map((node) => node.fullPath)
@@ -153,7 +155,7 @@ export default function Files(props: { visible: boolean }) {
       const restored = all.find((node) => node.fullPath === restorePath && node.type === "file")
       const target = restored ?? first
       setHighlighted(target?.fullPath ?? "")
-      app.setFile(getFile(target) ?? { status: "", path: "" })
+      workspace.setFile(getFile(target) ?? { status: "", path: "" })
       setLoaded(true)
       return
     }
@@ -162,12 +164,12 @@ export default function Files(props: { visible: boolean }) {
     if (!visible) {
       const target = next[Math.max(0, Math.min(next.length - 1, index))]
       setHighlighted(target?.fullPath ?? "")
-      app.setFile(getFile(target) ?? getFile(first) ?? { status: "", path: "" })
+      workspace.setFile(getFile(target) ?? getFile(first) ?? { status: "", path: "" })
       return
     }
 
-    const current = all.find((node) => node.type === "file" && node.fullPath === untrack(() => app.file.path))
-    app.setFile(getFile(visible) ?? getFile(current) ?? getFile(first) ?? { status: "", path: "" })
+    const current = all.find((node) => node.type === "file" && node.fullPath === untrack(() => workspace.file.path))
+    workspace.setFile(getFile(visible) ?? getFile(current) ?? getFile(first) ?? { status: "", path: "" })
   })
 
   createEffect(() => {
@@ -209,7 +211,7 @@ export default function Files(props: { visible: boolean }) {
       contentPadding={0}
     >
       <box width="100%" height="100%">
-        <Show when={app.filesLoaded && !app.filesError && files().length === 0}>
+        <Show when={workspace.filesLoaded && !workspace.filesError && files().length === 0}>
           <box paddingLeft={1} paddingRight={1}>
             <text fg={theme.textMuted}>Working directory clean</text>
           </box>
@@ -268,7 +270,7 @@ export default function Files(props: { visible: boolean }) {
                             ? theme.background
                             : app.config.diffDimStaged && Git.isFileFullyStaged(row.status ?? "")
                               ? theme.textMuted
-                              : getNameStatusColor(row.status || "")
+                              : getNameStatusColor(theme, row.status || "")
                         }
                       >
                         {row.status}

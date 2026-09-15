@@ -1,14 +1,13 @@
 import { createMemo, createResource } from "solid-js"
 import { DialogSelect } from "@ui/dialog-select"
-import { useApplication, type AIModel } from "@context/application"
+import { useApplication } from "@context/application"
+import type { AIModel } from "@util/config"
 import { useDialog } from "@ui/dialog"
-import { useToast } from "@context/toast"
 import { Opencode } from "@lib/opencode"
 
 export default function ModelsDialog() {
   const app = useApplication()
   const dialog = useDialog()
-  const toast = useToast()
   const [providers] = createResource(Opencode.providers)
 
   const options = createMemo(() =>
@@ -29,13 +28,7 @@ export default function ModelsDialog() {
   )
 
   function select(model: AIModel) {
-    app
-      .setAiModel(model)
-      .then(() => dialog.clear())
-      .catch((error) => {
-        toast.show({ message: "Failed to save AI model", variant: "error" })
-        console.error("Failed to save AI model", error)
-      })
+    app.setAiModel(model).then(() => dialog.clear())
   }
 
   return (
