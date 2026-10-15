@@ -27,7 +27,7 @@ permissions:
 jobs:
   version:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'flat6solutions/opengit'
+    if: github.repository == 'coastalwebdesigns/opengit'
     steps:
       - uses: useblacksmith/checkout@v1
         with:
@@ -67,7 +67,7 @@ jobs:
   build-cli:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'flat6solutions/opengit'
+    if: github.repository == 'coastalwebdesigns/opengit'
     steps:
       - uses: useblacksmith/checkout@v1
         with:
@@ -113,7 +113,7 @@ jobs:
       - version
       - build-cli
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'flat6solutions/opengit'
+    if: github.repository == 'coastalwebdesigns/opengit'
     steps:
       - uses: useblacksmith/checkout@v1
         with:
