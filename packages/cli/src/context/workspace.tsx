@@ -69,6 +69,16 @@ export const { use: useWorkspace, provider: WorkspaceProvider } = createSimpleCo
     const discard = (file: File) => mutate(() => Git.discardFile(file.path, file.status), "Failed to discard file")
     const discardAll = () => mutate(() => Git.discardAllFiles(), "Failed to discard files")
     const commit = (message: string) => mutate(() => Git.commit(message), "Failed to commit")
+    const push = (force: boolean) =>
+      Git.push(force)
+        .then(() => ({ ok: true as const }))
+        .catch((error) => {
+          console.error("Failed to push", error)
+          return {
+            ok: false as const,
+            message: error instanceof Error ? error.message : "An unknown error has occurred",
+          }
+        })
 
     onMount(async () => {
       loadFiles()
@@ -107,6 +117,7 @@ export const { use: useWorkspace, provider: WorkspaceProvider } = createSimpleCo
       discard,
       discardAll,
       commit,
+      push,
     }
   },
 })

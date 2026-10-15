@@ -22,6 +22,14 @@ function expect(res: { exitCode: number; stdout: Buffer; stderr: Buffer }, fallb
   throw NamedError.create("git_error", { message: useful })
 }
 
+function pushError(res: { stdout: Buffer; stderr: Buffer }) {
+  const output = [res.stderr.toString().trim(), res.stdout.toString().trim()]
+    .filter(Boolean)
+    .join("\n")
+    .replace(/(https?:\/\/)[^\s/@]+@/gi, "$1***@")
+  return output || "git push failed"
+}
+
 export namespace Git {
   export async function getGitRoot() {
     const cwd = process.cwd()
@@ -134,6 +142,17 @@ export namespace Git {
   export async function commit(message: string) {
     const root = await getGitRoot()
     expect(await $`git -C ${root} commit -m "${message}"`.quiet().nothrow(), "git commit failed")
+  }
+
+  export async function push(force = false) {
+    const root = await getGitRoot()
+    const command = force ? $`git -C ${root} push --force-with-lease` : $`git -C ${root} push`
+    const res = await command
+      .env({ ...process.env, GIT_TERMINAL_PROMPT: "0" })
+      .quiet()
+      .nothrow()
+    if (res.exitCode === 0) return
+    throw NamedError.create("git_error", { message: pushError(res) })
   }
 
   export async function discardFile(path: string, status?: string) {
