@@ -26,6 +26,7 @@ export default function ThemesDialog() {
       title="Themes"
       options={options}
       current={initial}
+      marker={false}
       onFilter={(query, filtered) => {
         const next = query.length === 0 ? initial : filtered[0]?.value
         if (next) theme.set(next)

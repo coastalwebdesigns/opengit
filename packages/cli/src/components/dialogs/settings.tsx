@@ -11,6 +11,7 @@ export default function SettingsDialog() {
   return (
     <DialogSelect
       title="Settings"
+      footer={false}
       options={[
         {
           title: "Layout",

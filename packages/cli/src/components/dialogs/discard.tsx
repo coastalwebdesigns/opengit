@@ -3,6 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import { useWorkspace } from "@context/workspace"
 import { type File } from "@lib/git"
+import { DialogBody, DialogFooter } from "@ui/dialog"
 
 interface DiscardDialogProps {
   file?: File
@@ -29,7 +30,7 @@ export default function DiscardDialog({ file, all, onConfirm }: DiscardDialogPro
   }
 
   return (
-    <box paddingBottom={1} gap={1}>
+    <DialogBody>
       <box
         flexDirection="row"
         alignItems="center"
@@ -50,18 +51,10 @@ export default function DiscardDialog({ file, all, onConfirm }: DiscardDialogPro
         </text>
         <text fg={theme.error}>{all ? "This cannot be undone." : `[*] ${file!.path}`}</text>
       </box>
-      <box
-        paddingLeft={4}
-        paddingRight={4}
-        width="100%"
-        flexDirection="row"
-        alignItems="flex-end"
-        justifyContent="flex-end"
-        gap={1}
-      >
+      <DialogFooter>
         <text fg={theme.text}>enter</text>
         <text fg={theme.textMuted}>confirm</text>
-      </box>
-    </box>
+      </DialogFooter>
+    </DialogBody>
   )
 }

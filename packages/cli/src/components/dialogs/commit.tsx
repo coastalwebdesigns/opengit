@@ -9,6 +9,7 @@ import { useWorkspace } from "@context/workspace"
 import { Opencode } from "@lib/opencode"
 import { Git } from "@lib/git"
 import { useToast } from "@context/toast"
+import { DialogBody, DialogFooter } from "@ui/dialog"
 
 interface CommitDialogProps {
   onConfirm: () => void
@@ -111,7 +112,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
   })
 
   return (
-    <box paddingBottom={1} gap={1}>
+    <DialogBody>
       <box
         flexDirection="row"
         alignItems="center"
@@ -171,15 +172,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
           </Show>
         </Show>
       </box>
-      <box
-        paddingLeft={4}
-        paddingRight={4}
-        width="100%"
-        flexDirection="row"
-        alignItems="flex-end"
-        justifyContent="flex-end"
-        gap={1}
-      >
+      <DialogFooter>
         <Show when={files().length > 0}>
           <Show when={loading()}>
             <Spinner />
@@ -187,7 +180,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
           <text fg={generatingMessage() || loading() ? theme.textMuted : theme.text}>enter</text>
           <text fg={theme.textMuted}>confirm</text>
         </Show>
-      </box>
-    </box>
+      </DialogFooter>
+    </DialogBody>
   )
 }

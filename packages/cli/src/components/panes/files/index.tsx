@@ -4,6 +4,7 @@ import { useKeybind } from "@context/keybind"
 import { tint, useTheme, getNameStatusColor } from "@context/theme"
 import { useKeybindRoute } from "@ui/route"
 import { Pane } from "@ui/pane"
+import { Selection } from "@ui/selection"
 import { useApplication } from "@context/application"
 import { useWorkspace } from "@context/workspace"
 import { Git } from "@lib/git"
@@ -228,54 +229,43 @@ export default function Files(props: { visible: boolean }) {
               {(row) => {
                 return (
                   <box
-                    flexDirection="row"
-                    justifyContent="space-between"
-                    backgroundColor={row.fullPath === highlighted() ? theme.primary : theme.background}
-                    paddingLeft={1}
-                    paddingRight={1}
                     height={1}
                     onMouseUp={() => {
                       setHighlighted(row.fullPath)
                       if (row.type === "directory") toggle(row.fullPath)
                     }}
                   >
-                    <box flexDirection="row" flexGrow={1} minWidth={0}>
-                      <text
-                        fg={row.fullPath === highlighted() ? theme.background : faded()}
-                        wrapMode="none"
-                        flexShrink={0}
-                      >
-                        {treePrefix(row, collapsed())}
-                      </text>
-                      <text
-                        fg={
-                          row.fullPath === highlighted()
-                            ? theme.background
-                            : row.type === "directory" ||
-                                (app.config.diffDimStaged && Git.isFileFullyStaged(row.status ?? ""))
+                    <Selection active={row.fullPath === highlighted()} inset={0} paddingRight={1}>
+                      <box flexDirection="row" flexGrow={1} minWidth={0}>
+                        <text fg={faded()} wrapMode="none" flexShrink={0}>
+                          {treePrefix(row, collapsed())}
+                        </text>
+                        <text
+                          fg={
+                            row.type === "directory" ||
+                            (app.config.diffDimStaged && Git.isFileFullyStaged(row.status ?? ""))
                               ? theme.textMuted
                               : theme.text
-                        }
-                        wrapMode="none"
-                        truncate
-                      >
-                        {row.name}
-                      </text>
-                    </box>
-                    <Show when={row.type === "file"}>
-                      <text
-                        flexShrink={0}
-                        fg={
-                          row.fullPath === highlighted()
-                            ? theme.background
-                            : app.config.diffDimStaged && Git.isFileFullyStaged(row.status ?? "")
+                          }
+                          wrapMode="none"
+                          truncate
+                        >
+                          {row.name}
+                        </text>
+                      </box>
+                      <Show when={row.type === "file"}>
+                        <text
+                          flexShrink={0}
+                          fg={
+                            app.config.diffDimStaged && Git.isFileFullyStaged(row.status ?? "")
                               ? theme.textMuted
                               : getNameStatusColor(theme, row.status || "")
-                        }
-                      >
-                        {row.status}
-                      </text>
-                    </Show>
+                          }
+                        >
+                          {row.status}
+                        </text>
+                      </Show>
+                    </Selection>
                   </box>
                 )
               }}
