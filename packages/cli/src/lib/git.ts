@@ -9,7 +9,7 @@ export type File = {
   removed?: number
 }
 
-let cachedGitRoot: Promise<string> | undefined
+let cachedGitRoot: { cwd: string; root: Promise<string> } | undefined
 
 function expect(res: { exitCode: number; stdout: Buffer; stderr: Buffer }, fallback: string) {
   if (res.exitCode === 0) return
@@ -24,13 +24,17 @@ function expect(res: { exitCode: number; stdout: Buffer; stderr: Buffer }, fallb
 
 export namespace Git {
   export async function getGitRoot() {
-    if (cachedGitRoot) return cachedGitRoot
-    cachedGitRoot = $`git rev-parse --show-toplevel`
-      .quiet()
-      .nothrow()
-      .text()
-      .then((root) => root.trim())
-    return cachedGitRoot
+    const cwd = process.cwd()
+    if (cachedGitRoot?.cwd === cwd) return cachedGitRoot.root
+    cachedGitRoot = {
+      cwd,
+      root: $`git rev-parse --show-toplevel`
+        .quiet()
+        .nothrow()
+        .text()
+        .then((root) => root.trim()),
+    }
+    return cachedGitRoot.root
   }
 
   export async function getCurrentBranch() {
