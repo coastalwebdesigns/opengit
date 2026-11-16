@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
+import { Opencode } from "../packages/cli/src/lib/opencode"
 
 const repo = process.env.GITHUB_REPOSITORY ?? "flat6solutions/opengit"
 
@@ -102,7 +102,7 @@ function simpleSummary(message: string): string | null {
 }
 
 async function summarizeCommit(
-  opencode: Awaited<ReturnType<typeof createOpencode>>,
+  model: Opencode.Model,
   message: string
 ): Promise<string> {
   const fallback = simpleSummary(message) ?? message
@@ -110,28 +110,14 @@ async function summarizeCommit(
     return fallback
   }
   console.log("Summarizing commit:", message)
-  const session = await opencode.client.session.create()
-  const result = await opencode.client.session
-    .prompt({
-      path: { id: session.data!.id },
-      body: {
-        model: { providerID: "opencode", modelID: "claude-sonnet-4-5" },
-        tools: {
-          "*": false,
-        },
-        parts: [
-          {
-            type: "text",
-            text: `Summarize this commit message for a changelog entry. Use ONLY the message text provided. Return a single line summary starting with a capital letter. Be concise but specific. If the message is already well-written, just clean it up (capitalize, fix typos, proper grammar). Do not include any prefixes like "fix:" or "feat:". Do not mention missing context or ask questions.
+  const result = await Opencode.prompt(
+    `Summarize this commit message for a changelog entry. Use ONLY the message text provided. Return a single line summary starting with a capital letter. Be concise but specific. If the message is already well-written, just clean it up (capitalize, fix typos, proper grammar). Do not include any prefixes like "fix:" or "feat:". Do not mention missing context or ask questions.
 
 
 Commit: ${message}`,
-          },
-        ],
-      },
-      signal: AbortSignal.timeout(120_000),
-    })
-    .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text ?? message)
+    model,
+    AbortSignal.timeout(120_000),
+  )
   return normalizeSummary(result, fallback)
 }
 
@@ -140,9 +126,10 @@ function getRawChangelog(commits: Commit[]): string[] {
 }
 
 async function summarizeWithOpenCode(commits: Commit[]): Promise<string[]> {
-  console.log("Summarizing commits with OpenCode SDK...")
+  console.log("Summarizing commits with OpenCode...")
 
-  const opencode = await createOpencode({ port: 0 })
+  const model = Opencode.select(await Opencode.models())
+  if (!model) return getRawChangelog(commits)
   const lines: string[] = []
   const summarizeStart = Bun.nanoseconds()
 
@@ -153,7 +140,7 @@ async function summarizeWithOpenCode(commits: Commit[]): Promise<string[]> {
 
     for (let i = 0; i < commits.length; i += BATCH_SIZE) {
       const batch = commits.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(batch.map((c) => summarizeCommit(opencode, c.message)))
+      const results = await Promise.all(batch.map((c) => summarizeCommit(model, c.message)))
       summaries.push(...results)
     }
     console.log(`Summarized ${summaries.length} commits in ${Math.round((Bun.nanoseconds() - summarizeStart) / 1_000_000)}ms`)
@@ -176,8 +163,7 @@ async function summarizeWithOpenCode(commits: Commit[]): Promise<string[]> {
     }
     throw error
   } finally {
-    await opencode.server.close()
-    console.log("OpenCode SDK server closed")
+    Opencode.closeClient()
   }
 
   return lines
@@ -195,7 +181,7 @@ export async function buildNotes(from: string, to: string): Promise<string[]> {
   try {
     return await summarizeWithOpenCode(commits)
   } catch (error) {
-    console.log("OpenCode SDK error, falling back to raw commits:", error)
+    console.log("OpenCode unavailable, falling back to raw commits:", Opencode.message(error))
     return getRawChangelog(commits)
   }
 }

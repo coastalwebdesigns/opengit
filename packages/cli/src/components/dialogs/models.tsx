@@ -1,30 +1,24 @@
-import { createMemo, createResource } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { DialogSelect } from "@ui/dialog-select"
 import { useApplication } from "@context/application"
 import type { AIModel } from "@util/config"
 import { useDialog } from "@ui/dialog"
-import { Opencode } from "@lib/opencode"
 
 export default function ModelsDialog() {
   const app = useApplication()
   const dialog = useDialog()
-  const [providers] = createResource(Opencode.providers)
+  onMount(() => {
+    void app.refreshAi()
+  })
 
   const options = createMemo(() =>
-    (providers() ?? [])
-      .toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-      .flatMap((provider) =>
-        Object.values(provider.models)
-          .toSorted((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-          .map((model) => ({
-            title: model.name,
-            value: {
-              providerID: model.providerID,
-              modelID: model.id,
-            },
-            category: provider.name,
-          })),
-      ),
+    app.models
+      .toSorted((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name))
+      .map((model) => ({
+        title: model.name,
+        value: { providerID: model.providerID, modelID: model.modelID },
+        category: model.provider,
+      })),
   )
 
   function select(model: AIModel) {
@@ -33,8 +27,9 @@ export default function ModelsDialog() {
 
   return (
     <DialogSelect
-      title="AI Model"
+      title={app.aiLoading ? "Loading OpenCode models" : "AI Model"}
       placeholder="Search models"
+      empty={app.aiLoading ? "Checking OpenCode..." : (app.aiError ?? "No models available")}
       options={options()}
       current={app.config.aiModel}
       onSelect={(option) => select(option.value)}

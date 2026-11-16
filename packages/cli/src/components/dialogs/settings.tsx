@@ -36,7 +36,12 @@ export default function SettingsDialog() {
         },
         {
           title: "Model",
-          footer: `${app.config.aiModel.providerID}/${app.config.aiModel.modelID}`,
+          footer:
+            app.config.aiEnabled && app.config.aiModel
+              ? `${app.config.aiModel.providerID}/${app.config.aiModel.modelID}`
+              : app.aiLoading
+                ? "Checking OpenCode..."
+                : "Unavailable",
           value: "ai-model",
           category: "AI",
           onSelect: (dialog) => dialog.replace(() => <ModelsDialog />),

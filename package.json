@@ -12,6 +12,6 @@
     "packages/*"
   ],
   "devDependencies": {
-    "@opencode-ai/sdk": "latest"
+    "@opencode/client": "2.3.0"
   }
 }

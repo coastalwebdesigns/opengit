@@ -33,6 +33,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
 
   let input: TextareaRenderable
   let disposed = false
+  let controller: AbortController | undefined
 
   const files = createMemo(() => workspace.files.filter((file) => Git.isFileStaged(file.status)))
   const [commitMessage, setCommitMessage] = createSignal<string>("")
@@ -55,8 +56,11 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
   async function generateWithAi() {
     if (generatingMessage() || loading()) return
     if (files().length === 0) return
+    const model = app.config.aiModel
+    if (!model) return
 
     setGeneratingMessage(true)
+    controller = new AbortController()
     if (input && !input.isDestroyed) {
       input.focusable = false
       input.blur()
@@ -66,7 +70,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
       const diff = await Git.getDiffStaged()
       if (disposed) return
 
-      const res = await Opencode.prompt(PROMPT.concat("\n\n").concat(diff), app.config.aiModel)
+      const res = await Opencode.prompt(PROMPT.concat("\n\n").concat(diff), model, controller.signal)
       if (disposed) return
 
       const message = res.trim().split("\n")[0]
@@ -76,8 +80,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
         setCommitMessage(message)
       }
     } catch (error) {
-      toast.show({ message: "Failed to generate message with ai", variant: "error" })
-      console.error("Failed to generate message with ai", error)
+      if (!disposed) toast.show({ message: Opencode.message(error), variant: "error" })
     } finally {
       setGeneratingMessage(false)
       setTimeout(() => {
@@ -90,6 +93,7 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
 
   onCleanup(() => {
     disposed = true
+    controller?.abort()
   })
 
   useKeyboard((key) => {
@@ -174,11 +178,22 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
       </box>
       <DialogFooter>
         <Show when={files().length > 0}>
-          <Show when={loading()}>
-            <Spinner />
-          </Show>
-          <text fg={generatingMessage() || loading() ? theme.textMuted : theme.text}>enter</text>
-          <text fg={theme.textMuted}>confirm</text>
+          <box width="100%" flexDirection="row" alignItems="center" gap={1}>
+            <box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+              <Show when={app.config.aiEnabled && app.config.aiModel}>
+                <text fg={theme.textMuted} wrapMode="none">
+                  {`${app.config.aiModel?.providerID}/${app.config.aiModel?.modelID}`}
+                </text>
+              </Show>
+            </box>
+            <box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+              <Show when={loading()}>
+                <Spinner />
+              </Show>
+              <text fg={generatingMessage() || loading() ? theme.textMuted : theme.text}>enter</text>
+              <text fg={theme.textMuted}>confirm</text>
+            </box>
+          </box>
         </Show>
       </DialogFooter>
     </DialogBody>

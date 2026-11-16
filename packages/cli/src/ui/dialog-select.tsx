@@ -19,6 +19,7 @@ function truncate(str: string, len: number): string {
 export interface DialogSelectProps<T> {
   title: string
   placeholder?: string
+  empty?: string
   options: DialogSelectOption<T>[]
   flat?: boolean
   footer?: boolean
@@ -261,7 +262,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         when={grouped().length > 0}
         fallback={
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>No results found</text>
+            <text fg={theme.textMuted}>{store.filter ? "No results found" : (props.empty ?? "No results found")}</text>
           </box>
         }
       >

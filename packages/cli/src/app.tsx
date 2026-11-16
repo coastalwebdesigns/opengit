@@ -69,13 +69,6 @@ function App() {
     process.exit(0)
   }
 
-  async function setup() {
-    const available = await Opencode.providers()
-    if (available.length > 0) {
-      app.setConfig({ aiEnabled: true })
-    }
-  }
-
   useKeybindRoute(
     (event) => {
       if (keybind.match("theme_mode_toggle", event)) {
@@ -114,7 +107,9 @@ function App() {
     ["theme_mode_toggle", "debug_toggle"],
   )
 
-  onMount(setup)
+  onMount(() => {
+    void app.refreshAi()
+  })
 
   return (
     <>

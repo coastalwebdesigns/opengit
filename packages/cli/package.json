@@ -18,7 +18,7 @@
     "prettier": "3.6.2"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.4",
+    "@opencode/client": "2.3.0",
     "@opentui/core": "^0.4.5",
     "@opentui/solid": "^0.4.5",
     "clipboardy": "^5.0.2",
