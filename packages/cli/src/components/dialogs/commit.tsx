@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "@context/theme"
 import { useKeyboard } from "@opentui/solid"
@@ -80,7 +80,14 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
         setCommitMessage(message)
       }
     } catch (error) {
-      if (!disposed) toast.show({ message: Opencode.message(error), variant: "error" })
+      // Closing the dialog aborts generation; that is not a failure.
+      if (disposed) return
+      console.error("Failed to generate commit message", {
+        model: `${model.providerID}/${model.modelID}`,
+        error,
+        cause: error instanceof Error ? error.cause : undefined,
+      })
+      toast.show({ message: Opencode.message(error), variant: "error" })
     } finally {
       setGeneratingMessage(false)
       setTimeout(() => {
@@ -90,6 +97,11 @@ export default function CommitDialog({ onConfirm }: CommitDialogProps) {
       }, 0)
     }
   }
+
+  onMount(() => {
+    // Startup checks can race an OpenCode service restart; retry so AI is not hidden all session.
+    if (!app.config.aiEnabled) void app.refreshAi()
+  })
 
   onCleanup(() => {
     disposed = true

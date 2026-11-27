@@ -41,7 +41,7 @@ export default function SettingsDialog() {
               ? `${app.config.aiModel.providerID}/${app.config.aiModel.modelID}`
               : app.aiLoading
                 ? "Checking OpenCode..."
-                : "Unavailable",
+                : (app.aiError ?? "Unavailable"),
           value: "ai-model",
           category: "AI",
           onSelect: (dialog) => dialog.replace(() => <ModelsDialog />),

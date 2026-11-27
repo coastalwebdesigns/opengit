@@ -53,9 +53,12 @@ export namespace Opencode {
   export function create(options: { file?: string; binary?: string | null; timeout?: number } = {}) {
     let connection: Promise<ReturnType<typeof OpenCode.make>> | undefined
 
+    // Accepts both "2.4.2" (service registration) and "opencode v2.4.2" (CLI --version).
     const compatible = (version: string) => {
-      const match = /^2\.(\d+)\./.exec(version)
-      return !!match && Number(match[1]) >= 3
+      const match = /(?:^|\s)v?(\d+)\.(\d+)\./.exec(version)
+      if (!match) return false
+      const major = Number(match[1])
+      return major > 2 || (major === 2 && Number(match[2]) >= 3)
     }
 
     async function connect() {
@@ -122,6 +125,8 @@ export namespace Opencode {
           connection = undefined
           throw error
         })
+        // An empty list usually means a stale or still-starting service; rediscover next time.
+        if (models.data.length === 0) connection = undefined
         return models.data
           .filter((model) =>
             eligible(
@@ -153,6 +158,8 @@ export namespace Opencode {
             if (signal?.aborted) throw signal.reason
             throw NamedError.create("opencode_error", {
               message: timeout.aborted ? "AI generation timed out. Try again." : message(error),
+              // Keep the provider/transport error for diagnostics; message() is user-facing only.
+              cause: error,
             })
           })
         if (!result.text.trim()) {
